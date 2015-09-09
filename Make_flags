@@ -12,11 +12,11 @@ ZLIBRARY = libzprimme.a
 #---------------------------------------------------------------
 # POSIX systems (e.g., Linux, MinGW, Cygwin)
 #---------------------------------------------------------------
-CC       ?= cc
-F77      ?= gfortran
-DEFINES  ?= -DF77UNDERSCORE 
-CFLAGS   ?= -O
-FFLAGS   ?= -fno-second-underscore -O
+#CC       ?= cc
+#F77      ?= gfortran
+#DEFINES  ?= -DF77UNDERSCORE 
+#CFLAGS   ?= -O
+#FFLAGS   ?= -fno-second-underscore -O
 #---------------------------------------------------------------
 # IBM architectures
 #CC       = xlc
@@ -26,12 +26,12 @@ FFLAGS   ?= -fno-second-underscore -O
 #FFLAGS   = -O2
 #---------------------------------------------------------------
 # Mac OS X
-#CC       = clang
+CC       = clang
 #CC       = gcc-mp-4.9
 #F77      = gfortran-mp-4.9
-#DEFINES  = -DF77UNDERSCORE 
-#CFLAGS   = -O2
-#FFLAGS   = -fno-second-underscore -O2
+DEFINES  = -DF77UNDERSCORE 
+CFLAGS   = -O2
+FFLAGS   = -fno-second-underscore -O2
 #---------------------------------------------------------------
 # Using Intel compilers
 #CC       = icc
