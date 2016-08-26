@@ -1,0 +1,69 @@
+// ---------------------------------------------------
+//                 primme configuration               
+// ---------------------------------------------------
+primme.n = 100
+primme.nLocal = 100
+primme.numProcs = 1
+primme.procID = 0
+
+// Output and reporting
+primme.printLevel = 1
+
+// Solver parameters
+primme.numEvals = 10
+primme.aNorm = 0.000000e+00
+primme.eps = 1.000000e-09
+primme.maxBasisSize = 15
+primme.minRestartSize = 6
+primme.maxBlockSize = 1
+primme.maxOuterIterations = 2147483647
+primme.maxMatvecs = 2147483647
+primme.target = primme_smallest
+primme.projection.projection = primme_proj_RR
+primme.initBasisMode = primme_init_krylov
+primme.numTargetShifts = 0
+primme.dynamicMethodSwitch = 1
+primme.locking = 1
+primme.initSize = 0
+primme.numOrthoConst = 0
+primme.iseed = -1 -1 -1 -1
+
+// Restarting
+primme.restarting.scheme = primme_thick
+primme.restarting.maxPrevRetain = 1
+
+// Correction parameters
+primme.correction.precondition = 1
+primme.correction.robustShifts = 0
+primme.correction.maxInnerIterations = -1
+primme.correction.relTolBase = 0
+primme.correction.convTest = primme_adaptive_ETolerance
+
+// projectors for JD cor.eq.
+primme.correction.projectors.LeftQ = 1
+primme.correction.projectors.LeftX = 1
+primme.correction.projectors.RightQ = 0
+primme.correction.projectors.SkewQ = 0
+primme.correction.projectors.RightX = 0
+primme.correction.projectors.SkewX = 1
+// ---------------------------------------------------
+
+    Successful return
+
+Eval[1]: 9.674354160239480E-04  rnorm: 2.724500317198092E-09 
+Eval[2]: 3.868805732811480E-03  rnorm: 2.894017302531792E-09 
+Eval[3]: 8.701304061962822E-03  rnorm: 2.136895381312085E-09 
+Eval[4]: 1.546025527344687E-02  rnorm: 2.272982443524421E-09 
+Eval[5]: 2.413912051848652E-02  rnorm: 3.165921321355408E-09 
+Eval[6]: 3.472950355547281E-02  rnorm: 2.040792491423862E-09 
+Eval[7]: 4.722115887278596E-02  rnorm: 1.173723720019841E-09 
+Eval[8]: 6.160200160066798E-02  rnorm: 2.254816448485401E-09 
+Eval[9]: 7.785811920255094E-02  rnorm: 1.750456984295911E-09 
+Eval[10]: 9.597378493453997E-02  rnorm: 2.371674235526190E-09 
+ 10 eigenpairs converged
+Tolerance : 3.998403790476947E-09 
+Iterations: 166
+Restarts  : 21
+Matvecs   : 587
+Preconds  : 521
+Recommended method for next run: DEFAULT_MIN_TIME
