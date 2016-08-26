@@ -146,7 +146,7 @@ def eigsh_check(eigsh_solver, A, k, M, which, sigma, tol, exact_evals, case_desc
 
 def test_primme_eigsh():
    """
-   Test cases for Primme.eighs.
+   Test cases for Primme.eigsh.
    """
 
    for n in (2, 3, 5, 10, 100):
