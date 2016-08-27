@@ -83,7 +83,7 @@ b) To install Primme with other python packages do:
 
 To verify the installation try to run the tests:
 
-   make tests
+   make test
 
 or execute the examples:
 
