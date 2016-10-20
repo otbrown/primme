@@ -14,7 +14,7 @@ SOLIBRARY = libprimme.so
 CC       ?= cc
 F77      ?= gfortran
 DEFINES  ?= -DF77UNDERSCORE 
-CFLAGS   ?= -O -fPIC
+CFLAGS   ?= -O3 -fPIC
 FFLAGS   ?= -fno-second-underscore -O
 #---------------------------------------------------------------
 # IBM architectures
@@ -57,7 +57,7 @@ FFLAGS   ?= -fno-second-underscore -O
 
 #---------------------------------------------------------------
 # Uncomment this when building MATLAB interface (but not for Octave)
-# CFLAGS += -DPRIMME_BLASINT_SIZE=64 -fPIC
+CFLAGS += -DPRIMME_BLASINT_SIZE=64 -fPIC
 #---------------------------------------------------------------
 
 #---------------------------------------------------------------
