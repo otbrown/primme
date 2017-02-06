@@ -333,7 +333,7 @@ static int allocate_workspace(primme_params *primme, int allocate) {
 
    CHKERR(solve_correction_Sprimme(NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 
             NULL, NULL, maxEvecsSize, 0, NULL, NULL, NULL, NULL, 
-            primme->maxBasisSize, NULL, NULL, primme->maxBlockSize, 
+            primme->maxBasisSize, NULL, NULL, primme->maxBlockSize, NULL,
             0.0, NULL, &realWorkSize, &intWorkSize, 0, primme), -1);
 
    /*----------------------------------------------------------------------*/
@@ -461,7 +461,7 @@ static int check_input(REAL *evals, SCALAR *evecs, REAL *resNorms,
 
    if (primme == NULL)
       ret = -4;
-   else if (primme->n <= 0 || primme->nLocal <= 0) 
+   else if (primme->n < 0 || primme->nLocal < 0 || primme->nLocal > primme->n) 
       ret = -5;
    else if (primme->numProcs < 1)
       ret = -6;
@@ -484,13 +484,15 @@ static int check_input(REAL *evals, SCALAR *evecs, REAL *resNorms,
              primme->target != primme_closest_leq  &&
              primme->target != primme_closest_abs    )
       ret = -13;
-   else if (primme->numOrthoConst < 0 || primme->numOrthoConst >=primme->n)
+   else if (primme->numOrthoConst < 0 || primme->numOrthoConst > primme->n)
       ret = -16;
    else if (primme->maxBasisSize < 2 && primme->maxBasisSize != primme->n) 
       ret = -17;
-   else if (primme->minRestartSize <= 0 && primme->n > 2) 
+   else if (primme->minRestartSize < 0 || (primme->minRestartSize == 0
+                                    && primme->n > 2 && primme->numEvals > 0))
       ret = -18;
-   else if (primme->maxBlockSize <= 0) 
+   else if (primme->maxBlockSize < 0
+             || (primme->maxBlockSize == 0 && primme->numEvals > 0)) 
       ret = -19;
    else if (primme->restartingParams.maxPrevRetain < 0)
       ret = -20;
@@ -501,7 +503,7 @@ static int check_input(REAL *evals, SCALAR *evecs, REAL *resNorms,
       ret = -22;
    else if (primme->locking == 0 && primme->initSize > primme->maxBasisSize)
       ret = -23;
-   else if (primme->locking && primme->initSize > primme->numEvals)
+   else if (primme->locking > 0 && primme->initSize > primme->numEvals)
       ret = -24;
    else if (primme->minRestartSize + primme->restartingParams.maxPrevRetain 
                    >= primme->maxBasisSize && primme->n > primme->maxBasisSize)
@@ -532,6 +534,10 @@ static int check_input(REAL *evals, SCALAR *evecs, REAL *resNorms,
    else if (primme->ldOPs != 0 && primme->ldOPs < primme->nLocal)
       ret = -35;
    /* Booked -36 and -37 */
+   else if (primme->locking == 0
+         && (primme->target == primme_closest_leq
+            || primme->target == primme_closest_geq))
+      ret = -38;
    /* Please keep this if instruction at the end */
    else if ( primme->target == primme_largest_abs ||
              primme->target == primme_closest_geq ||

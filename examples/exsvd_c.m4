@@ -260,10 +260,13 @@ ifdef(`ADVANCED', `
 CALL_PRIMME_SVDS
 REPORT_PRIMME_SVDS
 ')dnl
-   primme_svds_free(&primme_svds);
+   primme_svds_free(&primme_svds);ifdef(`USE_COMPLEX_CXX', `
+   delete [] svals;
+   delete [] svecs;
+   delete [] rnorms;',`
    free(svals);
    free(svecs);
-   free(rnorms);
+   free(rnorms);')
 
 ifdef(`USE_PETSC', `   ierr = PetscFinalize(); CHKERRQ(ierr);
 
@@ -458,10 +461,11 @@ void par_GlobalSum(void *sendBuf, void *recvBuf, int *count,
                          primme_svds_params *primme_svds, int *ierr) {
    MPI_Comm communicator = *(MPI_Comm *) primme_svds->commInfo;
 
-   if (MPI_Allreduce(sendBuf, recvBuf, *count, MPIU_REAL, MPIU_SUM, communicator) == MPI_SUCCESS)
-      *ierr = 0;
-   else
-      *ierr = 1;
+   if (sendBuf == recvBuf) {
+     *ierr = MPI_Allreduce(MPI_IN_PLACE, recvBuf, *count, MPIU_REAL, MPI_SUM, communicator) != MPI_SUCCESS;
+   } else {
+     *ierr = MPI_Allreduce(sendBuf, recvBuf, *count, MPIU_REAL, MPI_SUM, communicator) != MPI_SUCCESS;
+   }
 }
 ', `
 void LauchliApplyPreconditioner(void *x, PRIMME_INT *ldx, void *y, PRIMME_INT *ldy, int *blockSize,
@@ -514,8 +518,8 @@ void LauchliApplyPreconditioner(void *x, PRIMME_INT *ldx, void *y, PRIMME_INT *l
       /* y0 <- preconditioner for A^t*A  * y0 */
       LauchliApplyPreconditioner(aux, &ldaux, y, ldy, blockSize, &modeAtA, primme_svds, ierr);
       /* y1 <- preconditioner for A*A^t  * y1 */
-      yvec = (PRIMME_NUM *)aux + primme_svds->n;
-      LauchliApplyPreconditioner(yvec, &ldaux, yvec, ldy, blockSize, &modeAAt, primme_svds, ierr);
+      yvec = (PRIMME_NUM *)y + primme_svds->n;
+      LauchliApplyPreconditioner(&aux[primme_svds->n], &ldaux, yvec, ldy, blockSize, &modeAAt, primme_svds, ierr);
       free(aux);
    }
    *ierr = 0;

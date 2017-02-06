@@ -98,8 +98,8 @@ int check_convergence_Sprimme(SCALAR *X, PRIMME_INT nLocal, PRIMME_INT ldX,
    /* -------------------------- */
 
    if (flags == NULL) {
-      if (R) check_practical_convergence(NULL, 0, 0, NULL, numLocked, 0, left,
-            NULL, right-left, NULL, NULL, 0, NULL, rworkSize, primme);
+      CHKERR(check_practical_convergence(NULL, 0, 0, NULL, numLocked, 0, left,
+            NULL, right-left, NULL, NULL, 0, NULL, rworkSize, primme), -1);
       *iwork = max(*iwork, right-left); /* for toProject */
       return 0;
    }
@@ -175,7 +175,7 @@ int check_convergence_Sprimme(SCALAR *X, PRIMME_INT nLocal, PRIMME_INT ldX,
       /* of V and W in the next restart.                                   */
       /* ----------------------------------------------------------------- */
 
-      else if (blockNorms[i-left] <= primme->stats.estimateResidualError) {
+      else if (blockNorms[i-left] <= primme->stats.estimateResidualError && reset) {
          flags[i] = SKIP_UNTIL_RESTART;
          *reset = 1;
       }
@@ -311,6 +311,7 @@ static int check_practical_convergence(SCALAR *R, PRIMME_INT nLocal,
       else {
          flags[left+iev[i]] = UNCONVERGED;
       }
+      blockNorms[iev[i]] = normPr;
 
    }
 

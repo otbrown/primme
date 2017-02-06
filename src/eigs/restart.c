@@ -387,14 +387,6 @@ int restart_Sprimme(SCALAR *V, SCALAR *W, PRIMME_INT nLocal, int basisSize,
    primme->stats.estimateResidualError = 2*sqrt((double)*restartsSinceReset)*machEps*aNorm;
    
    /* ----------------------------------------------------------------------- */
-   /* Limit restartSize so that it plus 'to be locked' plus previous Ritz     */
-   /* vectors do not exceed basisSize.                                        */
-   /* ----------------------------------------------------------------------- */
-
-   if (primme->locking)
-      restartSize = min(restartSize, basisSize-(*numConverged-*numLocked));
-
-   /* ----------------------------------------------------------------------- */
    /* Insert as many initial guesses as eigenpairs have converged.            */
    /* Leave sufficient restarting room in the restarted basis so that to      */
    /* insert (in main_iter) as many initial guesses as the number of          */
@@ -402,6 +394,14 @@ int restart_Sprimme(SCALAR *V, SCALAR *W, PRIMME_INT nLocal, int basisSize,
    /* ----------------------------------------------------------------------- */
 
    restartSize -= min(min(numGuesses, *numConverged-*numLocked), restartSize);
+
+   /* ----------------------------------------------------------------------- */
+   /* Limit restartSize so that it plus 'to be locked' plus previous Ritz     */
+   /* vectors do not exceed basisSize.                                        */
+   /* ----------------------------------------------------------------------- */
+
+   if (primme->locking)
+      restartSize = min(restartSize, basisSize-(*numConverged-*numLocked));
 
    /* ----------------------------------------------------------------------- */
    /* Limit the number of previous retained vectors such that the final basis */
@@ -761,7 +761,6 @@ static int restart_soft_locking_Sprimme(int *restartSize, SCALAR *V,
 
    else {
       REAL *fakeResNorms = (REAL*)rwork;
-      int reset;
       size_t rworkSize0 = *rworkSize;
 
       for (i=0; i<*restartSize; i++)
@@ -769,7 +768,7 @@ static int restart_soft_locking_Sprimme(int *restartSize, SCALAR *V,
       assert(rworkSize0 >= (size_t)*restartSize);
       rworkSize0 -= (size_t)*restartSize;
       CHKERR(check_convergence_Sprimme(V, nLocal, ldV, NULL, 0, NULL, 0, 0,
-               0, *restartSize, flags, fakeResNorms, hVals, &reset, machEps,
+               0, *restartSize, flags, fakeResNorms, hVals, NULL, machEps,
                rwork+*restartSize, &rworkSize0, iwork, iworkSize, primme), -1);
 
       *numConverged = 0;
@@ -1579,6 +1578,8 @@ static int restart_refined(SCALAR *V, PRIMME_INT ldV, SCALAR *W, PRIMME_INT ldW,
    /* NOTE: Force to pass the next condition if you want to rebuild the QR    */
    /* factorization at every restart.                                         */
 
+   /* NOTE: keep the same condition here as in main_iter */
+
    if (*targetShiftIndex < 0 || fabs(primme->targetShifts[*targetShiftIndex]
             - primme->targetShifts[min(primme->numTargetShifts-1, numConverged)])
          > machEps*aNorm) {
@@ -1760,7 +1761,7 @@ static int restart_refined(SCALAR *V, PRIMME_INT ldV, SCALAR *W, PRIMME_INT ldW,
    assert(*rworkSize >= (size_t)restartSize);
    rworkSize0 = *rworkSize - (size_t)restartSize;
    CHKERR(solve_H_Sprimme(H, restartSize, ldH, R, ldR, NULL, 0, hU, newldhU,
-         hVecs, newldhVecs, (REAL*)rwork+restartSize, hSVals, numConverged,
+         hVecs, newldhVecs, (REAL*)rwork, hSVals, numConverged,
          machEps, &rworkSize0, rwork+restartSize, iworkSize, iwork, primme),
          -1);
 
@@ -2160,7 +2161,6 @@ static int dtr_Sprimme(int numLocked, SCALAR *hVecs, REAL *hVals, int *flags,
  * R                The factors of the QR decomposition of (A - targetShift*B)*V
  * ldR              The leading dimension of R
  * outR             Rotations of orthogonalizing hVecs
- * ldoutR           The leading dimension of outR
  * iwork            Integer work array
  * rwork            Work array
  * rworkSize        Length of the work array
@@ -2173,9 +2173,20 @@ static int ortho_coefficient_vectors_Sprimme(SCALAR *hVecs, int basisSize,
       size_t *rworkSize, primme_params *primme) {
 
    int i;
-   SCALAR *outR = NULL;
-   PRIMME_INT ldoutR=0;
-   size_t rworkSize0 = hVecs ? *rworkSize : 0;
+   SCALAR *rwork0;
+   int newNumPrevRetained=0;
+
+   /* Return memory requirement */
+
+   if (!hVecs) {
+      size_t rworkSize0 = 0;
+      CHKERR(ortho_Sprimme(NULL, ldhVecs, NULL, 0, 0, basisSize, NULL, 0, 0,
+               basisSize, NULL, 0.0, rwork, &rworkSize0, NULL), -1);
+      /* for dummyR and broadcasting previous retained vectors in hVecs */
+      rworkSize0 += (size_t)basisSize*(*numPrevRetained)*2+2;
+      *rworkSize = max(*rworkSize, rworkSize0);
+      return 0;
+   }
 
    if (primme->projectionParams.projection == primme_proj_harmonic) {
 
@@ -2190,36 +2201,50 @@ static int ortho_coefficient_vectors_Sprimme(SCALAR *hVecs, int basisSize,
             ldhVecs);
 
    }
-   else if (hVecs && primme->projectionParams.projection == primme_proj_refined) {
+
+   if (primme->procID == 0) {
       /* Avoid that ortho replaces linear dependent vectors by random vectors.*/
       /* The random vectors make the restarting W with large singular value.  */
       /* This change has shown benefit finding the smallest singular values.  */
 
-      outR = rwork;
-      rwork += basisSize*(*numPrevRetained);
-      assert(rworkSize0 >= (size_t)basisSize*(*numPrevRetained));
-      rworkSize0 -= (size_t)basisSize*(*numPrevRetained);
-   }
+      SCALAR *dummyR = rwork;
+      rwork0 = rwork + basisSize*(*numPrevRetained);
+      assert(*rworkSize >= (size_t)basisSize*(*numPrevRetained));
+      size_t rworkSize0 = *rworkSize - (size_t)basisSize*(*numPrevRetained);
 
-   CHKERR(ortho_Sprimme(hVecs, ldhVecs, !outR ? NULL :
-         &outR[-ldoutR*indexOfPreviousVecs], basisSize, indexOfPreviousVecs,
-         indexOfPreviousVecs+*numPrevRetained-1, NULL, 0, 0, basisSize,
-         primme->iseed, machEps, rwork, &rworkSize0, NULL), -1);
+      CHKERR(ortho_Sprimme(hVecs, ldhVecs,
+               &dummyR[-basisSize*indexOfPreviousVecs], basisSize,
+               indexOfPreviousVecs, indexOfPreviousVecs+*numPrevRetained-1,
+               NULL, 0, 0, basisSize, primme->iseed, machEps, rwork0,
+               &rworkSize0, NULL), -1);
 
-   if (outR) {
-      for (i=0; i<*numPrevRetained; i++)
-         if (REAL_PART(outR[ldoutR*i+indexOfPreviousVecs+i]) < machEps)
+      for (i=0; i<*numPrevRetained; i++) {
+         if (REAL_PART(dummyR[basisSize*i+indexOfPreviousVecs+i]) == 0.0) {
             break;
-      *numPrevRetained = i;
+         }
+      }
+      newNumPrevRetained = i;
    }
 
-   /* Return memory requirement */
-   if (!hVecs) {
-      if (primme->projectionParams.projection == primme_proj_refined) {
-         rworkSize0 += (size_t)basisSize*(*numPrevRetained); /* for outR */
-      }
-      *rworkSize = max(*rworkSize, rworkSize0);
+   /* Broadcast hVecs(indexOfPreviousVecs:indexOfPreviousVecs+numPrevRetained) */
+
+   if (primme->procID == 0) {
+      rwork[0] = (SCALAR)newNumPrevRetained;
+      Num_copy_matrix_Sprimme(&hVecs[ldhVecs*indexOfPreviousVecs], basisSize,
+            *numPrevRetained, ldhVecs, rwork+1, basisSize);
    }
+   else {
+      rwork[0] = 0.0;
+      Num_zero_matrix_Sprimme(rwork+1, basisSize, *numPrevRetained, basisSize);
+   }
+
+   rwork0 = rwork + basisSize*(*numPrevRetained) + 1;
+   assert(*rworkSize >= 2u*basisSize*(*numPrevRetained) + 2);
+   CHKERR(globalSum_Sprimme(rwork, rwork0, basisSize*(*numPrevRetained)+1,
+            primme), -1);
+   *numPrevRetained = (int)REAL_PART(rwork0[0]);
+   Num_copy_matrix_Sprimme(rwork0+1, basisSize, *numPrevRetained, basisSize,
+         &hVecs[ldhVecs*indexOfPreviousVecs], ldhVecs);
 
   return 0;
 }

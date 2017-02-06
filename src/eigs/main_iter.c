@@ -167,6 +167,7 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
    int iworkSize;           /* Size of iwork array                           */
    int numPrevRitzVals = 0; /* Size of the prevRitzVals updated in correction*/
    int ret;                 /* Return value                                  */
+   int touch=0;             /* param used in inner solver stopping criteria  */
 
    int *iwork;              /* Integer workspace pointer                     */
    int *flags;              /* Indicates which Ritz values have converged    */
@@ -309,6 +310,15 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
    blockSize = 0; 
 
    for (i=0; i<primme->numEvals; i++) perm[i] = i;
+
+   /* -------------------------------------- */
+   /* Quick return for matrix of dimension 1 */
+   /* -------------------------------------- */
+
+   if (primme->numEvals == 0) {
+      primme->initSize = 0;
+      return 0;
+   }
 
    /* -------------------------------------- */
    /* Quick return for matrix of dimension 1 */
@@ -482,8 +492,15 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
             /* For locking interior, restart and lock now any converged. */
             /* If Q, restart after an eigenpair converged to recompute   */
             /* QR with a different shift.                                */
+            /* Also if it has been converged as many pairs as initial    */
+            /* guesses has introduced in V, then restart and introduce   */
+            /* new guesses.                                              */
 
             numConverged += recentlyConverged;
+
+            /* Reset touch every time an eigenpair converges */
+
+            if (recentlyConverged > 0) touch = 0;
 
             if (numConverged >= primme->numEvals ||
                 (primme->locking && recentlyConverged > 0
@@ -491,9 +508,13 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
                   && primme->target != primme_largest
                   && primme->projectionParams.projection == primme_proj_RR) ||
                 targetShiftIndex < 0 ||
-                (Q && primme->targetShifts[targetShiftIndex] !=
+                /* NOTE: use the same condition as in restart_refined */
+                (Q && fabs(primme->targetShifts[targetShiftIndex] -
                   primme->targetShifts[
-                     min(primme->numTargetShifts-1, numConverged)])) {
+                     min(primme->numTargetShifts-1, numConverged)]) >= 
+                        max(primme->aNorm, primme->stats.estimateLargestSVal))
+               || (numConverged >= nextGuess-primme->numOrthoConst
+                  && numGuesses > 0)) {
 
                break;
 
@@ -551,7 +572,7 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
                         evecsHat, ldevecsHat, UDU, ipivot, evals, numLocked,
                         numConvergedStored, hVals, prevRitzVals,
                         &numPrevRitzVals, flags, basisSize, blockNorms, iev,
-                        blockSize, machEps, rwork, &rworkSize, iwork, iworkSize,
+                        blockSize, &touch, machEps, rwork, &rworkSize, iwork, iworkSize,
                         primme), -1);
 
                /* ------------------------------------------------------ */
@@ -668,12 +689,18 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
                maxRecentlyConverged = 0;
             }
 
-            /* When QR are computed and there are more than one target shift, */
+            /* When there are more than one target shift,                     */
             /* limit blockSize and the converged values to one.               */
 
-            else if (primme->numTargetShifts > numConverged+1 && Q) {
-               availableBlockSize = 1;
-               maxRecentlyConverged = numConverged-numLocked+1;
+            else if (primme->numTargetShifts > numConverged+1) {
+               if (primme->locking) {
+                  maxRecentlyConverged =
+                     max(min(primme->numEvals, numLocked+1) - numConverged, 0);
+               }
+               else {
+                  maxRecentlyConverged = 1;
+               }
+               availableBlockSize = maxRecentlyConverged;
             }
 
             else {
@@ -719,6 +746,16 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
                   &recentlyConverged, &numArbitraryVecs, dummySmallestResNorm,
                   hVecsRot, primme->maxBasisSize, &reset, rwork, &rworkSize,
                   iwork, iworkSize, primme);
+
+            /* When QR is computed and there are more than one target shift   */
+            /* and some eigenpair has converged values to one, don't provide  */
+            /* candidate for the next iteration, because it may be the closest*/
+            /* to a different target.                                         */
+
+            if (Q && numConverged+recentlyConverged > numLocked
+                  && primme->numTargetShifts > numLocked+1) {
+               blockSize = 0;
+            }
 
             /* Updated the number of converged pairs */
             /* Intentionally we include the pairs flagged SKIP_UNTIL_RESTART */
@@ -788,7 +825,23 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
          /* into the basis.                                          */
 
          if (numGuesses > 0) {
-            int numNew = max(0, min(primme->minRestartSize-basisSize, numGuesses));
+            /* Try to keep minRestartSize guesses in the search subspace */
+
+            int numNew = max(0, min(
+                     primme->minRestartSize + numConverged 
+                     - (nextGuess - primme->numOrthoConst), numGuesses));
+
+            /* Don't make the resulting basis size larger than maxBasisSize */
+
+            numNew = max(0,
+                  min(basisSize+numNew, primme->maxBasisSize) - basisSize);
+
+            /* Don't increase basis size beyond matrix dimension */
+
+            numNew = max(0,
+                  min(basisSize+numNew+primme->numOrthoConst+numLocked,
+                     primme->n)
+                  - primme->numOrthoConst - numLocked - basisSize);
 
             Num_copy_matrix_Sprimme(&evecs[nextGuess*ldevecs], primme->nLocal,
                   numNew, ldevecs, &V[basisSize*ldV], ldV);
@@ -797,8 +850,9 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
             numGuesses -= numNew;
 
             CHKERR(ortho_Sprimme(V, ldV, NULL, 0, basisSize, basisSize+numNew-1,
-                     evecs, ldevecs, numLocked, primme->nLocal, primme->iseed,
-                     machEps, rwork, &rworkSize, primme), -1);
+                     evecs, ldevecs, numLocked+primme->numOrthoConst,
+                     primme->nLocal, primme->iseed, machEps, rwork, &rworkSize,
+                     primme), -1);
 
             /* Compute W = A*V for the orthogonalized corrections */
 
@@ -1002,7 +1056,8 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
  * W              A*V
  * nLocal         Local length of vectors in the basis
  * basisSize      Size of the basis V and W
- * ldV            The leading dimension of V, W, X and R
+ * ldV            The leading dimension of V and X
+ * ldW            The leading dimension of W and R
  * hVecs          The projected vectors
  * ldhVecs        The leading dimension of hVecs
  * hVals          The Ritz values
@@ -1066,7 +1121,7 @@ int prepare_candidates_Sprimme(SCALAR *V, PRIMME_INT ldV, SCALAR *W,
       int liw=0;
 
       CHKERR(check_convergence_Sprimme(NULL, nLocal, 0, NULL, 0, NULL,
-               numLocked, 0, basisSize-maxBlockSize, basisSize, NULL, NULL,
+               numLocked, 0, 0, basisSize, NULL, NULL,
                NULL, NULL, 0.0, NULL, &lrw, &liw, 0, primme), -1);
       lrw = max(lrw,
             (size_t)Num_update_VWXR_Sprimme(NULL, NULL, nLocal, basisSize,
@@ -1115,14 +1170,11 @@ int prepare_candidates_Sprimme(SCALAR *V, PRIMME_INT ldV, SCALAR *W,
 
    *recentlyConverged = 0;
    while (1) {
-      /* Workspace limited by maxBlockSize */
-      assert(blockNormsSize <= maxBlockSize);
-
       /* Recompute flags in iev(*blockSize:*blockSize+blockNormsize) */
       for (i=*blockSize; i<blockNormsSize; i++)
          flagsBlock[i-*blockSize] = flags[iev[i]];
       CHKERR(check_convergence_Sprimme(X?&X[(*blockSize)*ldV]:NULL, nLocal,
-            ldV, R?&R[(*blockSize)*ldV]:NULL, ldV, evecs, numLocked,
+            ldV, R?&R[(*blockSize)*ldW]:NULL, ldW, evecs, numLocked,
             ldevecs, 0, blockNormsSize, flagsBlock,
             &blockNorms[*blockSize], hValsBlock, reset, machEps, rwork,
             &rworkSize0, iwork, iworkSize, primme), -1);
@@ -1186,8 +1238,8 @@ int prepare_candidates_Sprimme(SCALAR *V, PRIMME_INT ldV, SCALAR *W,
             iev[*blockSize] = iev[blki];
             if (X) Num_copy_matrix_Sprimme(&X[blki*ldV], nLocal, 1, ldV,
                   &X[(*blockSize)*ldV], ldV);
-            if (R) Num_copy_matrix_Sprimme(&R[blki*ldV], nLocal, 1, ldV,
-                  &R[(*blockSize)*ldV], ldV);
+            if (R) Num_copy_matrix_Sprimme(&R[blki*ldW], nLocal, 1, ldW,
+                  &R[(*blockSize)*ldW], ldW);
             (*blockSize)++;
          }
 
@@ -1287,7 +1339,6 @@ static int verify_norms(SCALAR *V, PRIMME_INT ldV, SCALAR *W, PRIMME_INT ldW,
 
    int i;         /* Loop variable                                     */
    REAL *dwork = (REAL *) rwork; /* pointer to cast rwork to REAL*/
-   int reset;    /* doomy variable */
 
    /* Compute the residual vectors */
 
@@ -1304,7 +1355,7 @@ static int verify_norms(SCALAR *V, PRIMME_INT ldV, SCALAR *W, PRIMME_INT ldW,
    /* Check for convergence of the residual norms. */
 
    CHKERR(check_convergence_Sprimme(V, primme->nLocal, ldV, W, ldW, NULL, 0,
-            0, 0, basisSize, flags, resNorms, hVals, &reset, machEps, rwork,
+            0, 0, basisSize, flags, resNorms, hVals, NULL, machEps, rwork,
             rworkSize, iwork, iworkSize, primme), -1);
 
    /* Set converged to 1 if the first basisSize pairs are converged */
