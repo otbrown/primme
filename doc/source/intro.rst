@@ -31,6 +31,8 @@ Changelog
 ^^^^^^^^^
 Changes in PRIMME 2.1 (released on XXX):
 
+* Proper convergence history for singular value solvers.
+
 * Support Octave.
 
 Changes in PRIMME 2.0 (released on September 19, 2016):
@@ -232,7 +234,7 @@ The next directories and files should be available:
    * :file:`tools/`,     tools used to generated some headers;
 
 * :file:`Matlab/`,       Matlab interface;
-* :file:`PYTHON/`,       Python interface;
+* :file:`Python/`,       Python interface;
 * :file:`examples/`,     sample programs in C, C++ and F77, both sequential and parallel;
 * :file:`tests/`,        drivers for testing purpose and test cases;
 * :file:`lib/libprimme.a`,   the PRIMME library (to be made);
@@ -303,6 +305,9 @@ Full description of actions that `make` can take:
 
 * `make lib`, builds the static library :file:`libprimme.a`.
 * `make solib`, builds the shared library :file:`libprimme.so`.
+* `make matlab`, builds `libprimme.a` compatible with MATLAB and the MATLAB module.
+* `make octave`, builds `libprimme.a` and the Octave module.
+* `make python`, builds `libprimme.a` and the Python module.
 * `make test`, build and execute simple examples.
 * `make clean`, removes all :file:`*.o`, :file:`a.out`, and core files from :file:`src`.
 
