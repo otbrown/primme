@@ -43,7 +43,7 @@ assert(norm(evals - (50:-1:50-k+1)') < 1e-6*norm(A))
 [evecs, evals, rnorms, stats] = primme_eigs(single(A), k, 25.2, ops, ...
                                             'DEFAULT_MIN_TIME');
 
-[a,p] = sort(abs((1:50) - 25.2));
+[a,p] = sort(abs((1:50) - 25.2)); p = sort(p(1:k), 'descend');
 assert(all(abs(diag(evals) - p(1:k)') < 1e-6*stats.estimateAnorm))
 assert(all(rnorms < 1e-6*stats.estimateAnorm));
 
@@ -59,29 +59,29 @@ for i=1:k
   assert(norm(A*evecs(:,i) - evecs(:,i)*evals(i,i)) < 1e-6*norm(A))
 end
 
-% Compute the 6 closest eigenvalues to 30.5 using the Jacobi preconditioner
+% Compute the 6 eigenvalues closest to 30.5 using the Jacobi preconditioner
 % (too much convenient for a diagonal matrix)
 
 Adiag = diag(A);
 
-Pfun = @(x)((Adiag - 30.5).\x); % Pass a function handler
-evals = primme_eigs(A, k, 30.5, [], [], Pfun);
+Pfun = @(x)((Adiag - 30.1).\x); % Pass a function handler
+evals = primme_eigs(A, k, 30.1, [], [], Pfun);
 
-P = spdiags(Adiag - 30.5, 0, 50, 50); % Pass a matrix
-evals = primme_eigs(A, k, 30.5, [], [], P);
- 
-% Compute the 6 closest eigenvalues to 30.5 using ILU(0) as a preconditioner
+P = spdiags(Adiag - 30.1, 0, 50, 50); % Pass a matrix
+evals = primme_eigs(A, k, 30.1, [], [], P);
+
+% Compute the 6 eigenvalues closest to 30.5 using ILU(0) as a preconditioner
 
 A = sparse(diag(1:50) + diag(ones(49,1), 1) + diag(ones(49,1), -1));
-[L,U] = ilu(A, struct('type', 'nofill'));
-evals = primme_eigs(A, k, 30.5, [], [], L, U);
+[L,U] = ilu(A - speye(50)*30.1, struct('type', 'nofill'));
+evals = primme_eigs(A, k, 30.1, [], [], L, U);
 
 % Test different methods and return history record
 
 eigs_meths = {'DEFAULT_METHOD', 'DYNAMIC', 'DEFAULT_MIN_TIME', ...
               'DEFAULT_MIN_MATVECS', 'Arnoldi', 'GD_plusK', 'GD_Olsen_plusK', ...
               'JD_Olsen_plusK', 'JDQR', 'JDQMR', 'JDQMR_ETol', ...
-              'SUBSPACE_ITERATION', 'LOBPCG_OrthoBasis', ...
+              'STEEPEST_DESCENT', 'LOBPCG_OrthoBasis', ...
               'LOBPCG_OrthoBasis_Window'}; 
 for i = 1:numel(eigs_meths)
    [x,d,r,s,h] = primme_eigs(diag(1:100), 2, 'SA', struct('disp', 3), ...
@@ -111,7 +111,7 @@ matrix_dim_n = 50;
 
 [svecsl, svals, svecsr] = primme_svds(fun, matrix_dim_m, matrix_dim_n, k, 'S', ops);
 
-assert(norm(diag(svals) - (1:k)') < 1e-6*norm(A))
+assert(norm(diag(svals) - (k:-1:1)') < 1e-6*norm(A))
 for i=1:k
   assert(norm(A*svecsr(:,i) - svecsl(:,i)*svals(i,i)) < 1e-6*norm(A))
 end
@@ -130,10 +130,12 @@ ops.primme.maxBlockSize = 2; % set block size for first stage
 % Compute the 5 smallest singular values, using a preconditioner only
 % for the first stage
 
-Pstruct = struct('AHA', diag(A'*A), ...
-                 'AAH', ones(200, 1), 'aug', ones(250, 1));
-Pfun = @(x,mode)Pstruct.(mode).\x;
-svals = primme_svds(A, 5, 'S', [], Pfun);
+Pstruct = struct('AHA', diag(diag(A'*A))); % passing preconditioner as a matrix
+svals = primme_svds(A, 5, 'S', [], Pstruct);
+
+PAtA = diag(A'*A);
+Pstruct = struct('AHA', @(x)PAtA.\x); % passing preconditioner as a function
+svals = primme_svds(A, 5, 'S', [], Pstruct);
 
 % Compute the 5 smallest singular values of a square matrix using ILU(0)
 % as a preconditioner
@@ -141,6 +143,12 @@ svals = primme_svds(A, 5, 'S', [], Pfun);
 A = sparse(diag(1:50) + diag(ones(49,1), 1));
 [L,U] = ilu(A, struct('type', 'nofill'));
 svals = primme_svds(A, 5, 'S', [], L, U);
+
+% Compute the 5 smallest singular values of a square matrix using the R factor
+% of QR=A as a preconditioner
+
+R = qr(A, 0);
+svals = primme_svds(A, 5, 'S', [], [], R);
 
 % Test different methods and return history record
 
@@ -152,7 +160,6 @@ for i = 1:numel(svds_meths)
    opts = struct('disp', 3, 'method', svds_meths{i});
    for j = 1:numel(eigs_meths)
       opts.primme.method = eigs_meths{j};
-      opts
       [u,sv,v,r,s,h] = primme_svds(diag(1:100), 2, 'S', opts);
    end
 end

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, College of William & Mary
+ * Copyright (c) 2017, College of William & Mary
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -119,22 +119,25 @@ void primme_initialize(primme_params *primme) {
    primme->correctionParams.convTest           = primme_adaptive_ETolerance;
 
    /* Printing and reporting */
-   primme->outputFile              = stdout;
-   primme->printLevel              = 1;
-   primme->stats.numOuterIterations= 0;
-   primme->stats.numRestarts       = 0;
-   primme->stats.numMatvecs        = 0;
-   primme->stats.numPreconds       = 0;
-   primme->stats.volumeGlobalSum   = 0;
-   primme->stats.numOrthoInnerProds= 0.0;
-   primme->stats.elapsedTime       = 0.0;
-   primme->stats.timeMatvec        = 0.0;
-   primme->stats.timePrecond       = 0.0;
-   primme->stats.timeGlobalSum     = 0.0;
-   primme->stats.estimateMaxEVal   = -HUGE_VAL;
-   primme->stats.estimateMinEVal   = HUGE_VAL;
-   primme->stats.estimateLargestSVal = -HUGE_VAL;
-   primme->stats.maxConvTol        = 0.0L;
+   primme->outputFile                          = stdout;
+   primme->printLevel                          = 1;
+   primme->stats.numOuterIterations            = 0; 
+   primme->stats.numRestarts                   = 0;
+   primme->stats.numMatvecs                    = 0;
+   primme->stats.numPreconds                   = 0;
+   primme->stats.numGlobalSum                  = 0;
+   primme->stats.volumeGlobalSum               = 0;
+   primme->stats.numOrthoInnerProds            = 0.0;
+   primme->stats.elapsedTime                   = 0.0;
+   primme->stats.timeMatvec                    = 0.0;
+   primme->stats.timePrecond                   = 0.0;
+   primme->stats.timeOrtho                     = 0.0;
+   primme->stats.timeGlobalSum                 = 0.0;
+   primme->stats.estimateMinEVal               = -HUGE_VAL;
+   primme->stats.estimateMaxEVal               = HUGE_VAL;
+   primme->stats.estimateLargestSVal           = -HUGE_VAL;
+   primme->stats.maxConvTol                    = 0.0;
+   primme->stats.estimateResidualError         = 0.0;
 
    /* Optional user defined structures */
    primme->matrix                  = NULL;
@@ -216,7 +219,7 @@ void primme_free(primme_params *primme) {
  *        JDQR,                    : Original block, Jacobi Davidson
  *        JDQMR,                   : Our block JDQMR method (similar to JDCG)
  *        JDQMR_ETol,              : Slight, but efficient JDQMR modification
- *        SUBSPACE_ITERATION,      : equiv. to GD(block,2*block)
+ *        STEEPEST_DESCENT,      : equiv. to GD(block,2*block)
  *        LOBPCG_OrthoBasis,       : equiv. to GD(nev,3*nev)+nev
  *        LOBPCG_OrthoBasis_Window : equiv. to GD(block,3*block)+block nev>block
  *
@@ -397,7 +400,7 @@ int primme_set_method(primme_preset_method method, primme_params *primme) {
       primme->correctionParams.projectors.SkewX   = 1;
       primme->correctionParams.convTest           = primme_adaptive_ETolerance;
    }
-   else if (method == PRIMME_SUBSPACE_ITERATION) {
+   else if (method == PRIMME_STEEPEST_DESCENT) {
       primme->locking                             = 1;
       primme->maxBasisSize                        = primme->numEvals*2;
       primme->minRestartSize                      = primme->numEvals;
@@ -877,8 +880,29 @@ int primme_get_member(primme_params *primme, primme_params_label label,
       case PRIMME_stats_numPreconds:
               v->int_v = primme->stats.numPreconds;
       break;
+      case PRIMME_stats_numGlobalSum:
+              v->int_v = primme->stats.numGlobalSum;
+      break;
+      case PRIMME_stats_volumeGlobalSum:
+              v->int_v = primme->stats.volumeGlobalSum;
+      break;
+      case PRIMME_stats_numOrthoInnerProds:
+              v->double_v = primme->stats.numOrthoInnerProds;
+      break;
       case PRIMME_stats_elapsedTime:
               v->double_v = primme->stats.elapsedTime;
+      break;
+      case PRIMME_stats_timeMatvec:
+              v->double_v = primme->stats.timeMatvec;
+      break;
+      case PRIMME_stats_timePrecond:
+              v->double_v = primme->stats.timePrecond;
+      break;
+      case PRIMME_stats_timeOrtho:
+              v->double_v = primme->stats.timeOrtho;
+      break;
+      case PRIMME_stats_timeGlobalSum:
+              v->double_v = primme->stats.timeGlobalSum;
       break;
       case PRIMME_stats_estimateMinEVal:
               v->double_v = primme->stats.estimateMinEVal;
@@ -1131,8 +1155,26 @@ int primme_set_member(primme_params *primme, primme_params_label label,
       case PRIMME_stats_numPreconds:
               primme->stats.numPreconds = *v.int_v;
       break;
+      case PRIMME_stats_volumeGlobalSum:
+              primme->stats.volumeGlobalSum = *v.int_v;
+      break;
+      case PRIMME_stats_numOrthoInnerProds:
+              primme->stats.numOrthoInnerProds = *v.double_v;
+      break;
       case PRIMME_stats_elapsedTime:
               primme->stats.elapsedTime = *v.double_v;
+      break;
+      case PRIMME_stats_timeMatvec:
+              primme->stats.timeMatvec = *v.double_v;
+      break;
+      case PRIMME_stats_timePrecond:
+              primme->stats.timePrecond = *v.double_v;
+      break;
+      case PRIMME_stats_timeOrtho:
+              primme->stats.timeOrtho = *v.double_v;
+      break;
+      case PRIMME_stats_timeGlobalSum:
+              primme->stats.timeGlobalSum = *v.double_v;
       break;
       case PRIMME_stats_estimateMinEVal:
               primme->stats.estimateMinEVal = *v.double_v;
@@ -1259,7 +1301,14 @@ int primme_member_info(primme_params_label *label_, const char** label_name_,
    IF_IS(stats_numRestarts            , stats_numRestarts);
    IF_IS(stats_numMatvecs             , stats_numMatvecs);
    IF_IS(stats_numPreconds            , stats_numPreconds);
+   IF_IS(stats_numGlobalSum           , stats_numGlobalSum);
+   IF_IS(stats_volumeGlobalSum        , stats_volumeGlobalSum);
+   IF_IS(stats_numOrthoInnerProds     , stats_numOrthoInnerProds);
    IF_IS(stats_elapsedTime            , stats_elapsedTime);
+   IF_IS(stats_timeMatvec             , stats_timeMatvec);
+   IF_IS(stats_timePrecond            , stats_timePrecond);
+   IF_IS(stats_timeOrtho              , stats_timeOrtho);
+   IF_IS(stats_timeGlobalSum          , stats_timeGlobalSum);
    IF_IS(stats_estimateMinEVal        , stats_estimateMinEVal);
    IF_IS(stats_estimateMaxEVal        , stats_estimateMaxEVal);
    IF_IS(stats_estimateLargestSVal    , stats_estimateLargestSVal);
@@ -1311,6 +1360,8 @@ int primme_member_info(primme_params_label *label_, const char** label_name_,
       case PRIMME_stats_numRestarts:
       case PRIMME_stats_numMatvecs:
       case PRIMME_stats_numPreconds:
+      case PRIMME_stats_numGlobalSum:
+      case PRIMME_stats_volumeGlobalSum:
       case PRIMME_numProcs:
       case PRIMME_procID:
       case PRIMME_nLocal:
@@ -1334,6 +1385,11 @@ int primme_member_info(primme_params_label *label_, const char** label_name_,
       case PRIMME_aNorm:
       case PRIMME_eps:
       case PRIMME_correctionParams_relTolBase:
+      case PRIMME_stats_numOrthoInnerProds:
+      case PRIMME_stats_timeMatvec:
+      case PRIMME_stats_timePrecond:
+      case PRIMME_stats_timeOrtho:
+      case PRIMME_stats_timeGlobalSum:
       case PRIMME_stats_elapsedTime:
       case PRIMME_stats_estimateMinEVal:
       case PRIMME_stats_estimateMaxEVal:
@@ -1410,7 +1466,7 @@ int primme_constant_info(const char* label_name, int *value) {
    IF_IS(PRIMME_JDQR);
    IF_IS(PRIMME_JDQMR);
    IF_IS(PRIMME_JDQMR_ETol);
-   IF_IS(PRIMME_SUBSPACE_ITERATION);
+   IF_IS(PRIMME_STEEPEST_DESCENT);
    IF_IS(PRIMME_LOBPCG_OrthoBasis);
    IF_IS(PRIMME_LOBPCG_OrthoBasis_Window);
    

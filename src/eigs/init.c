@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, College of William & Mary
+ * Copyright (c) 2017, College of William & Mary
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -132,7 +132,7 @@ int init_basis_Sprimme(SCALAR *V, PRIMME_INT nLocal, PRIMME_INT ldV,
 
    int i;
    int initSize;
-   int random;
+   int random=0;
 
    /* Return memory requirement */
 

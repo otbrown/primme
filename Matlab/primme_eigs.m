@@ -1,10 +1,7 @@
 function [varargout] = primme_eigs(varargin)
-%PRIMME_EIGS Find a few eigenvalues/vectors of large, sparse Hermitian matrices
-%   PRIMME_EIGS finds a few eigenvalues and their corresponding eigenvectors 
-%   of a real symmetric or Hermitian matrix, A, by calling PRIMME through the 
-%   driver PRIMME_MEX. Almost full PRIMME functionality is supported.
+%PRIMME_EIGS  Find a few eigenvalues/vectors of large, sparse Hermitian matrices
 %
-%   D = PRIMME_EIGS(A) returns a vector of A's 6 largest algebraic eigenvalues.
+%   D = PRIMME_EIGS(A) returns a vector of A's 6 largest magnitude eigenvalues.
 %
 %   D = PRIMME_EIGS(AFUN,DIM) accepts a function AFUN instead of a matrix. AFUN
 %   is a function handle and y = AFUN(x) returns the matrix-vector product A*x.
@@ -17,20 +14,26 @@ function [varargout] = primme_eigs(varargin)
 %     If TARGET is a real number, it finds the closest eigenvalues to TARGET.
 %     If TARGET is
 %       'LA' or 'SA', eigenvalues with the largest or smallest algebraic value
-%       'LM' or 'SM', eigenvalues with the largest or smallest distance from
-%                 the given values in OPTS.targetShifts, or zero if
-%                 OPTS.targetShifts is empty. If m values are provided, the
-%                 first m eigenvalues D are found s.t.
-%                 max/min ABS(D(i)-OPTS.targetShifts(i)), i=1:m.
-%                 OPTS.targerShifts(m) is used for i=m+1:K.
+%       'LM' or 'SM', eigenvalues with the largest or smallest magnitude if
+%                 OPTS.targetShifts is empty. If TARGET is a real or complex 
+%                 scalar including 0, PRIMME_EIGS finds the eigenvalues closest 
+%                 to TARGET.
+%                 In addition, if m values are provided in OPTS.targetShifts, 
+%                 find eigenvalues that are farthest (LM) or closest (SM) in 
+%                 absolute value from the given values. 
+%                 Examples: 
+%                 k=1, 'LM', OPTS.targetShifts=[] returns the largest magnitude lambda(A).
+%                 k=1, 'SM', OPTS.targetShifts=[] returns the smallest magnitude lambda(A).
+%                 k=3, 'SM', OPTS.targetShifts=[2, 5] returns the closest eigenvalue in 
+%                 absolute sense to 2, and the two closest eigenvalues to 5.
 %       'CLT' or 'CGT', find eigenvalues closest to but less or greater than
 %                 the given values in OPTS.targetShifts.
 %
 %   D = PRIMME_EIGS(A,K,TARGET,OPTS) specifies extra solver parameters. Some
 %     default values are indicated in brackets {}:
 %
-%     OPTS.aNorm: the estimated 2-norm of A {estimate the norm internally}
-%     OPTS.tol: convergence tolerance: 
+%     OPTS.aNorm: the estimated 2-norm of A {0.0 (estimate the norm internally)}
+%     OPTS.tol: convergence tolerance:                      {eps*1e4}
 %                NORM(A*X(:,i)-X(:,i)*D(i,i)) < tol*NORM(A)
 %     OPTS.maxBlockSize: maximum block size (useful for high multiplicities) {1}
 %     OPTS.disp: different level reporting (0-3) (see HIST) {no output 0}
@@ -46,7 +49,7 @@ function [varargout] = primme_eigs(varargin)
 %     OPTS.scheme: the restart scheme {'primme_thick'}
 %     OPTS.maxPrevRetain: number of Ritz vectors from previous iteration
 %          that are kept after restart {typically >0, see PRIMME doc}
-%     OPTS.robustShifts: set to true may avoid stagnation or misconvergence 
+%     OPTS.robustShifts: setting to true may avoid stagnation or misconvergence 
 %     OPTS.maxInnerIterations: maximum number of inner solver iterations
 %     OPTS.LeftQ: use the locked vectors in the left projector
 %     OPTS.LeftX: use the approx. eigenvector in the left projector
@@ -54,7 +57,7 @@ function [varargout] = primme_eigs(varargin)
 %     OPTS.RightX: use the approx. eigenvector in the right projector
 %     OPTS.SkewQ: use the preconditioned locked vectors in the right projector
 %     OPTS.SkewX: use the preconditioned approx. eigenvector in the right projector
-%     OPTS.relTolBase: a legacy from classical JDQR (recommend not use)
+%     OPTS.relTolBase: a legacy from classical JDQR (not recommended)
 %     OPTS.convTest: how to stop the inner QMR Method
 %     OPTS.iseed: random seed
 %
@@ -75,7 +78,7 @@ function [varargout] = primme_eigs(varargin)
 %     'JDQR',                     Original block, Jacobi Davidson
 %     'JDQMR',                    Our block JDQMR method (similar to JDCG)
 %     'JDQMR_ETol',               Slight, but efficient JDQMR modification
-%     'SUBSPACE_ITERATION',       equiv. to GD(block,2*block)
+%     'STEEPEST_DESCENT',         equiv. to GD(block,2*block)
 %     'LOBPCG_OrthoBasis',        equiv. to GD(nev,3*nev)+nev
 %     'LOBPCG_OrthoBasis_Window'  equiv. to GD(block,3*block)+block nev>block
 %
@@ -84,7 +87,8 @@ function [varargout] = primme_eigs(varargin)
 %
 %   D = PRIMME_EIGS(A,K,TARGET,OPTS,METHOD,P) 
 %   D = PRIMME_EIGS(A,K,TARGET,OPTS,METHOD,P1,P2) uses preconditioner P or
-%   P = P1*P2 to accelerate convergence of the method.
+%   P = P1*P2 to accelerate convergence of the method. Applying P\x should
+%   approximate (A-sigma*eye(N))\x, for sigma near the wanted eigenvalue(s).
 %   If P is [] then a preconditioner is not applied. P may be a function 
 %   handle PFUN such that PFUN(x) returns P\x.
 %
@@ -96,10 +100,10 @@ function [varargout] = primme_eigs(varargin)
 %
 %   [X,D,R,STATS] = PRIMME_EIGS(...) returns a struct to report statistical
 %   information about number of matvecs, elapsed time, and estimates for the
-%   largest and the smallest algebraic eigenvalues on A.
+%   largest and smallest algebraic eigenvalues of A.
 %
-%   [X,D,R,STATS,HIST] = PRIMME_EIGS(...) instead of printing the convergence
-%   history, it is returned. Every row is a record, and the columns report:
+%   [X,D,R,STATS,HIST] = PRIMME_EIGS(...) it returns the convergence history,
+%   instead of printing it. Every row is a record, and the columns report:
 %  
 %   HIST(:,1): number of matvecs
 %   HIST(:,2): time
@@ -122,19 +126,30 @@ function [varargout] = primme_eigs(varargin)
 %
 %      d = primme_eigs(A,10,'SM') % the 10 smallest magnitude eigenvalues
 %
-%      d = primme_eigs(A,10,25) % the 10 closest eigenvalues to 25
+%      d = primme_eigs(A,10,25.0) % the 10 closest eigenvalues to 25.0
+%
+%      opts.targetShifts = [2 20];
+%      d = primme_eigs(A,10,'SM',opts) % 1 eigenvalue closest to 2 and 
+%                                      % 9 eigenvalues closest to 20
 %
 %      opts = struct();
 %      opts.tol = 1e-4; % set tolerance
 %      opts.maxBlockSize = 2; % set block size
-%      [x,d] = primme_eigs(A,10,'S',opts,'DEFAULT_MIN_TIME')
+%      [x,d] = primme_eigs(A,10,'SA',opts,'DEFAULT_MIN_TIME')
 %
 %      opts.orthoConst = x;  
-%      [d,rnorms] = primme_eigs(A,10,'S',opts) % find another 10
+%      [d,rnorms] = primme_eigs(A,10,'SA',opts) % find another 10
 %
-%      % Build a Jacobi preconditioner (too convenient for a diagonal matrix!)
+%      % Compute the 6 eigenvalues closest to 30.5 using ILU(0) as a precond.
+%      % by passing the matrices L and U.
+%      A = sparse(diag(1:50) + diag(ones(49,1), 1) + diag(ones(49,1), -1));
+%      [L,U] = ilu(A, struct('type', 'nofill'));
+%      d = primme_eigs(A, k, 30.5, [], [], L, U);
+%
+%      % Compute the 6 eigenvalues closest to 30.5 using Jacobi preconditioner
+%      % by passing a function.
 %      Pfun = @(x)(diag(A) - 30.5)\x;
-%      d = primme_eigs(A,5,30.5,[],[],Pfun) % find the closest 5 to 30.5
+%      d = primme_eigs(A,6,30.5,[],[],Pfun);
 %
 %   For more details see PRIMME documentation at
 %   http://www.cs.wm.edu/~andreas/software/doc/readme.html 
@@ -354,6 +369,15 @@ function [varargout] = primme_eigs(varargin)
       init = [init init0];
    end
 
+   % Set default tol
+   if ~isfield(opts, 'eps')
+      if Adouble
+         opts.eps = eps*1e4;
+      else
+         opts.eps = sqrt(eps)*1e4;
+      end
+   end 
+
    % Create primme_params
    primme = primme_mex('primme_initialize');
 
@@ -405,6 +429,14 @@ function [varargout] = primme_eigs(varargin)
    % Process error code and return the required arguments
    if ierr ~= 0
       error([xprimme ' returned ' num2str(ierr) ': ' primme_error_msg(ierr)]);
+   end
+   
+   % Return interior eigenvalues in descending order
+   if ~strcmp(opts.target,'primme_largest') ...
+         && ~strcmp(opts.target,'primme_smallest') ...
+         && ~strcmp(opts.target,'primme_largest_abs')
+      [evals,ind] = sort(evals,'descend');
+      evecs = evecs(:,ind);
    end
 
    if (nargout <= 1)
@@ -485,8 +517,8 @@ function [varargout] = primme_eigs(varargin)
    end
 end
 
-function [f] = fcnchk_gen(x, n)
-   if exist('fcnchk')
+function [f] = fcnchk_gen(x)
+   if exist('fcnchk', 'var')
       f = fcnchk(x);
    else 
       f = x;

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, College of William & Mary
+ * Copyright (c) 2017, College of William & Mary
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -93,7 +93,7 @@ double primme_wTimer(int zeroTimer) {
  */
 
 /* Simply return the microseconds time of day */
-double primme_get_wtime() {
+double primme_get_wtime(void) {
    static struct timeval tv;
 
    gettimeofday(&tv, NULL); 

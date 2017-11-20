@@ -1,7 +1,7 @@
 function [varargout] = primme_svds(varargin)
-%PRIMME_SVDS   Find a few singular values and vectors of large, sparse matrices
+%PRIMME_SVDS  Find a few singular values and vectors of large, sparse matrices
 %
-%   S = PRIMME_SVDS(A) computes the 6 largest singular values of A.
+%   S = PRIMME_SVDS(A) returns a vector with the 6 largest singular values of A.
 %
 %   S = PRIMME_SVDS(AFUN,M,N) accepts the function handle AFUN to perform
 %   the matrix vector products with an M-by-N matrix A. 
@@ -21,19 +21,19 @@ function [varargout] = primme_svds(varargin)
 %
 %   Field name       Parameter                               Default
 %
-%   OPTIONS.aNorm    estimation of the 2-norm A                    -
+%   OPTIONS.aNorm    estimation of the 2-norm A                  0.0
 %   OPTIONS.tol      convergence tolerance (see eps):          1e-10
 %                    NORM([A*V-U*S;A'*U-V*S]) <= tol * NORM(A).
-%   OPTIONS.maxit    maximum number of iterat. (see maxMatvecs)  inf
+%   OPTIONS.maxit    maximum number of matvecs  (see maxMatvecs) inf
 %   OPTIONS.p        maximum basis size (see maxBasisSize)         -
 %   OPTIONS.disp     level of reporting 0-3 (see HIST)             0
-%   OPTIONS.isreal   if 0, the matrix is complex; else it's real   1
+%   OPTIONS.isreal   if 0, the matrix is complex; else it's real   0
 %   OPTIONS.isdouble if 0, the matrix is single; else it's double  1
 %   OPTIONS.method   which equivalent eigenproblem to solve
 %                    - 'primme_svds_normalequations': A'*A or A*A'
 %                    - 'primme_svds_augmented': [0 A';A 0]
 %                    - 'primme_svds_hybrid':               (default)
-%                       first normal eqs and then augmented
+%                       first normal equations and then augmented
 %   OPTIONS.u0       approx. left singular vectors                []
 %   OPTIONS.v0       approx. right singular vectors               []
 %   OPTIONS.orthoConst external orthogonalization constraints     [] 
@@ -50,12 +50,22 @@ function [varargout] = primme_svds(varargin)
 %   and for further descriptions of the methods visit:
 %   http://www.cs.wm.edu/~andreas/software/doc/appendixsvds.html#preset-methods
 %
-%   S = PRIMME_SVDS(A,K,SIGMA,OPTIONS,P)
-%   S = PRIMME_SVDS(A,K,SIGMA,OPTIONS,P1,P2) makes use of a preconditioner,
-%   applying P\X or (P1*P2)\X. If P is [] then a preconditioner is not
-%   applied. P may be a function handle PFUN such that PFUN(X,'AHA')
-%   returns an approximation of (A'*A)\X, PFUN(X,'AAH'), of (A*A')\X and
-%   PFUN(X,'aug'), of [zeros(N,N) A';A zeros(M,M)]\X.
+%   S = PRIMME_SVDS(A,K,SIGMA,OPTIONS,P) applies a preconditioner P as follows.
+%   If P is a matrix it applies P\X and P'\X to approximate A\X and A'\X.
+%   If P is a function handle, PFUN, PFUN(X,'notransp') returns P\X and
+%   PFUN(X,'transp') returns P’\X, approximating A\X and A'\X respectively.
+%   If P is a struct, it can have one or more of the following fields:
+%     P.AHA\X or P.AHA(X) returns an approximation of (A'*A)\X, 
+%     P.AAH\X or P.AAH(X) returns an approximation of (A*A')\X,
+%     P.aug\X or P.aug(X) returns an approximation of [zeros(N,N) A';A zeros(M,M)]\X.
+%   If P is [] then no preconditioner is applied.
+%
+%   S = PRIMME_SVDS(A,K,SIGMA,OPTIONS,P1,P2) applies a factorized preconditioner.
+%   If both P1,P2 are nonempty, apply (P1*P2)\X to approximate A\X. 
+%   If P1 is [] and P2 is nonempty, then (P2'*P2)\X approximates A'*A. 
+%   P2 can be the R factor of an (incomplete) QR factorization of A or the L
+%   factor of an (incomplete) LL' factorization of A'*A (RIF).
+%   If both P1 and P2 are [] then no preconditioner is applied.
 %
 %   [U,S,V] = PRIMME_SVDS(...) returns also the corresponding singular vectors.
 %   If A is M-by-N and K singular triplets are computed, then U is M-by-K
@@ -63,15 +73,15 @@ function [varargout] = primme_svds(varargin)
 %   orthonormal columns.
 %
 %   [S,R] = PRIMME_SVDS(...)
-%   [U,S,V,R] = PRIMME_SVDS(...) returns upper bounds of the residual norm
-%   of each K triplet, NORM([A*V(:,i)-S(i,i)*U(:,i); A'*U(:,i)-S(i,i)*V(:,i)]).
+%   [U,S,V,R] = PRIMME_SVDS(...) returns the residual norm of each K triplet,
+%   NORM([A*V(:,i)-S(i,i)*U(:,i); A'*U(:,i)-S(i,i)*V(:,i)]).
 %
 %   [U,S,V,R,STATS] = PRIMME_SVDS(...) returns how many times A and P were
 %   used and elapsed time. The application of A is counted independently from
 %   the application of A'.
 %
-%   [U,S,V,R,STATS,HIST] = PRIMME_SVDS(...) instead of printing the convergence
-%   history, it is returned. Every row is a record, and the columns report:
+%   [U,S,V,R,STATS,HIST] = PRIMME_SVDS(...) returns the convergence history,
+%   instead of printing it. Every row is a record, and the columns report:
 %  
 %   HIST(:,1): number of matvecs
 %   HIST(:,2): time
@@ -107,7 +117,16 @@ function [varargout] = primme_svds(varargin)
 %      opts.orthoConst = {u,v};  
 %      [s,rnorms] = primme_svds(A,10,'S',opts) % find another 10
 %
-%      % Define a preconditioner only for first stage (A'*A)
+%      % Compute the 5 smallest singular values of a square matrix using ILU(0)
+%      % as a preconditioner
+%      A = sparse(diag(1:50) + diag(ones(49,1), 1));
+%      [L,U] = ilu(A, struct('type', 'nofill'));
+%      svals = primme_svds(A, 5, 'S', [], L, U);
+%      
+%      % Compute the 5 smallest singular values of a rectangular matrix using
+%      % Jacobi preconditioner on (A'*A)
+%      A = sparse(diag(1:50) + diag(ones(49,1), 1));
+%      A(200,50) = 1;  % size(A)=[200 50]
 %      Pstruct = struct('AHA', diag(A'*A),...
 %                       'AAH', ones(200,1), 'aug', ones(250,1));
 %      Pfun = @(x,mode)Pstruct.(mode).\x;
@@ -206,25 +225,29 @@ function [varargout] = primme_svds(varargin)
       nextArg = nextArg + 1;
    end
 
-   if nargin == nextArg
+   if nargin == nextArg || (nargin > nextArg && isempty(varargin{nextArg+1}))
       P = varargin{nextArg};
       if isnumeric(P)
-         P = @(x,mode)precondsvds(P,x,mode);
+         if ~isempty(P)
+            P = @(x,mode)precondsvds_Pmat(P,x,mode);
+         end
+      elseif isstruct(P)
+         P = @(x,mode)precondsvds_Pstruct(P,x,mode);
       else
          P = fcnchk_gen(P); % get the function handle of user's function
+         P = @(x,mode)precondsvds_Pfun(P,x,mode,opts.m);
       end
-      opts.applyPreconditioner = P;
-      opts.precondition = 1;
-      nextArg = nextArg + 1;
-   end
-   
-   if nargin >= nextArg
+      if ~isempty(P)
+         opts.applyPreconditioner = P;
+         opts.precondition = 1;
+      end
+   elseif nargin >= nextArg
       P1 = varargin{nextArg};
       P2 = varargin{nextArg+1};
-      if ~isnumeric(P1) || ~isnumeric(P2)
-         error('p1 and p2 must be matrices');
+      if (~isempty(P1) && ~isnumeric(P1)) || ~isnumeric(P2)
+         error('P1 and P2 must be matrices');
       end
-      P = @(x,mode)precondsvds2(P1, P2, x, mode);
+      P = @(x,mode)precondsvds_P1P2(P1, P2, x, mode);
       opts.applyPreconditioner = P;
       opts.precondition = 1;
    end
@@ -431,8 +454,15 @@ function [varargout] = primme_svds(varargin)
    if ierr ~= 0
       error([xprimme_svds ' returned ' num2str(ierr) ': ' primme_svds_error_msg(ierr)]);
    end
+   
+   % Return smallest or interior singular triplets in descending order
+   if strcmp(opts.target,'primme_svds_smallest') || strcmp(opts.target,'primme_svds_closest_abs')
+      [svals,ind] = sort(svals,'descend');
+      svecsl = svecsl(:,ind);
+      svecsr = svecsr(:,ind);
+   end
 
-   if nargout == 1
+   if nargout <= 1
       varargout{1} = svals;
    elseif nargout == 2
       varargout{1} = svals;
@@ -531,7 +561,7 @@ function [y] = matvecsvds(A, x, mode)
    end
 end
 
-function [y] = precondsvds(P, x, mode)
+function [y] = precondsvds_Pmat(P, x, mode)
    if strcmp(mode, 'AHA')
       y = P\(P'\x);
    elseif strcmp(mode, 'AAH')
@@ -541,18 +571,52 @@ function [y] = precondsvds(P, x, mode)
    end
 end
 
-function [y] = precondsvds2(P1, P2, x, mode)
+function [y] = precondsvds_Pfun(P, x, mode, m)
    if strcmp(mode, 'AHA')
-      y = P2\(P1\(P1'\(P2'\x)));
+      y = P(P(x, 'transp'), 'notransp');
    elseif strcmp(mode, 'AAH')
-      y = P1'\(P2'\(P2\(P1\x)));
+      y = P(P(x, 'notransp'), 'transp');
    else
-      y = [P2\(P1\x(size(P1,1)+1:end,:)); P1'\(P2'\x(1:size(P1,1),:))];
+      y = [P(x(m+1:end,:), 'notransp'); P(x(1:m,:), 'transp')];
    end
 end
 
-function [f] = fcnchk_gen(x, n)
-   if exist('fcnchk')
+function [y] = precondsvds_P1P2(P1, P2, x, mode)
+   if ~isempty(P1)
+      if strcmp(mode, 'AHA')
+         y = P2\(P1\(P1'\(P2'\x)));
+      elseif strcmp(mode, 'AAH')
+         y = P1'\(P2'\(P2\(P1\x)));
+      else
+         y = [P2\(P1\x(size(P1,1)+1:end,:)); P1'\(P2'\x(1:size(P1,1),:))];
+      end
+   else
+      if strcmp(mode, 'AHA')
+         y = P2\(P2'\x);
+      elseif strcmp(mode, 'AAH')
+         y = P2'\(P2\x);
+      else
+         y = x;
+      end
+   end
+end
+
+function [y] = precondsvds_Pstruct(P, x, mode)
+   if isfield(P, mode)
+      M = P.(mode);
+      if isnumeric(M)
+         y = M\x;
+      else
+         y = M(x);
+      end
+   else
+      y = x;
+   end
+end
+
+
+function [f] = fcnchk_gen(x)
+   if exist('fcnchk', 'var')
       f = fcnchk(x);
    else 
       f = x;
@@ -684,8 +748,8 @@ function s = primme_svds_error_msg(errorCode)
          s = 'Unknown error code';
       end
    elseif errorCode >= -200
-      s = ['Error from first stage: ' primme_error_code(errorCode+100)];
+      s = ['Error from first stage: ' primme_error_msg(errorCode+100)];
    else
-      s = ['Error from second stage: ' primme_error_code(errorCode+200)];
+      s = ['Error from second stage: ' primme_error_msg(errorCode+200)];
    end
 end

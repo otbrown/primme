@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, College of William & Mary
+ * Copyright (c) 2017, College of William & Mary
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -154,6 +154,17 @@ int check_convergence_Sprimme(SCALAR *X, PRIMME_INT nLocal, PRIMME_INT ldX,
       }
 
       /* ----------------------------------------------------------------- */
+      /* If residual norm is around the bound of the error in the          */
+      /* residual norm, then stop converging this value and force reset    */
+      /* of V and W in the next restart.                                   */
+      /* ----------------------------------------------------------------- */
+
+      else if (blockNorms[i-left] <= primme->stats.estimateResidualError && reset) {
+         flags[i] = SKIP_UNTIL_RESTART;
+         *reset = 1;
+      }
+
+      /* ----------------------------------------------------------------- */
       /* If locking there may be an accuracy problem close to convergence. */
       /* Check if there is danger if R is provided. If the Ritz vector was */
       /* flagged practically converged before and R is not provided then   */
@@ -167,17 +178,6 @@ int check_convergence_Sprimme(SCALAR *X, PRIMME_INT nLocal, PRIMME_INT ldX,
          else if (flags[i] != PRACTICALLY_CONVERGED) {
             flags[i] = UNCONVERGED;
          }
-      }
-
-      /* ----------------------------------------------------------------- */
-      /* If residual norm is around the bound of the error in the          */
-      /* residual norm, then stop converging this value and force reset    */
-      /* of V and W in the next restart.                                   */
-      /* ----------------------------------------------------------------- */
-
-      else if (blockNorms[i-left] <= primme->stats.estimateResidualError && reset) {
-         flags[i] = SKIP_UNTIL_RESTART;
-         *reset = 1;
       }
 
       else {

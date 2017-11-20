@@ -50,6 +50,21 @@
 #include "mex.h"
 #include "primme.h"
 
+// Attempt to capture ctrl+c
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+#include <signal.h>
+static volatile int keepRunning = 1;
+#if defined (__unix__)
+static sighandler_t prev_handler = NULL;
+#else
+static sig_t prev_handler = NULL;
+#endif
+void interrumptHandler(int sig) {
+   keepRunning = 0;
+   if (prev_handler) prev_handler(sig);
+}
+#endif
+
 #ifndef macro_max
 #define macro_max(a, b) ((a) > (b) ? (a) : (b))
 #endif
@@ -397,7 +412,7 @@ static void* mxArrayToPointer(const mxArray *a) {
 static primme_params_label mxArrayToLabel(const mxArray *a) {
    if (mxIsChar(a)) {
       const char *label_name = mxArrayToString(a);
-      primme_params_label label;
+      primme_params_label label = (primme_params_label)-1;
       CHKERR(primme_member_info(&label, &label_name, NULL, NULL));
       return label;
    }
@@ -413,7 +428,7 @@ static primme_params_label mxArrayToLabel(const mxArray *a) {
 static primme_svds_params_label mxArrayToLabelSvds(const mxArray *a) {
    if (mxIsChar(a)) {
       const char *label_name = mxArrayToString(a);
-      primme_svds_params_label label;
+      primme_svds_params_label label = (primme_svds_params_label)-1;
       CHKERR(primme_svds_member_info(&label, &label_name, NULL, NULL));
       return label;
    }
@@ -782,6 +797,14 @@ static void matrixMatvecEigs(void *x, PRIMME_INT *ldx, void *y, PRIMME_INT *ldy,
 {  
    mxArray *prhs[2], *plhs[1];
 
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+   // Check interrupt handler
+   if (!keepRunning) {
+      *ierr = 1;
+      return;
+   }
+#endif
+
    // Create input vector x (avoid copy if possible)
 
    prhs[1] = create_mxArray<typename Real<T>::type,PRIMME_INT>((T*)x, primme->n,
@@ -929,9 +952,22 @@ static void mexFunction_xprimme(int nlhs, mxArray *plhs[], int nrhs,
       primme->monitorFun = monitorFunEigs<T>;
    }
 
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+   // Set ctrl+c handler
+
+   keepRunning = 1;
+   prev_handler = signal(SIGINT, interrumptHandler);
+#endif
+
    // Call xprimme
 
    int ret = tprimme(evals, evecs, rnorms, primme);
+
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+   // Unset ctrl+c handler
+
+   signal(SIGINT, prev_handler);
+#endif
 
    // Return error code
 
@@ -940,6 +976,7 @@ static void mexFunction_xprimme(int nlhs, mxArray *plhs[], int nrhs,
    // Return evals
 
    if (nlhs >= 2) {
+      mxSetM(mxEvals, primme->initSize);
       plhs[1] = mxEvals;
    }
    else {
@@ -949,6 +986,7 @@ static void mexFunction_xprimme(int nlhs, mxArray *plhs[], int nrhs,
    // Return rnorms
 
    if (nlhs >= 3) {
+      mxSetM(mxRnorms, primme->initSize);
       plhs[2] = mxRnorms;
    }
    else {
@@ -1344,6 +1382,14 @@ static void matrixMatvecSvds(void *x, PRIMME_INT *ldx, void *y, PRIMME_INT *ldy,
 {  
    mxArray *prhs[3], *plhs[1];
 
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+   // Check interrupt handler
+   if (!keepRunning) {
+      *ierr = 1;
+      return;
+   }
+#endif
+
    // Get numbers of rows of x and y
    PRIMME_INT mx, my;
    const char *str;
@@ -1498,9 +1544,22 @@ static void mexFunction_xprimme_svds(int nlhs, mxArray *plhs[], int nrhs,
       primme_svds->monitorFun = monitorFunSvds<T>;
    }
 
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+   // Set ctrl+c handler
+
+   keepRunning = 1;
+   prev_handler = signal(SIGINT, interrumptHandler);
+#endif
+
    // Call xprimme_svds
 
    int ret = tprimme_svds(svals, svecs, rnorms, primme_svds);
+
+#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
+   // Unset ctrl+c handler
+
+   signal(SIGINT, prev_handler);
+#endif
 
    // Return error code
 
@@ -1509,6 +1568,7 @@ static void mexFunction_xprimme_svds(int nlhs, mxArray *plhs[], int nrhs,
    // Return svals
 
    if (nlhs >= 2) {
+      mxSetM(mxSvals, primme_svds->initSize);
       plhs[1] = mxSvals;
    }
    else {
@@ -1518,6 +1578,7 @@ static void mexFunction_xprimme_svds(int nlhs, mxArray *plhs[], int nrhs,
    // Return rnorms
 
    if (nlhs >= 3) {
+      mxSetM(mxRnorms, primme_svds->initSize);
       plhs[2] = mxRnorms;
    }
    else {

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, College of William & Mary
+ * Copyright (c) 2017, College of William & Mary
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -167,7 +167,7 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
 
    int *iwork;              /* Integer workspace pointer                     */
    int *flags;              /* Indicates which Ritz values have converged    */
-   int *lockedFlags;        /* Flags for the locked pairs                    */
+   int *lockedFlags=NULL;   /* Flags for the locked pairs                    */
    int *ipivot;             /* The pivot for the UDU factorization of M      */
    int *iev;                /* Evalue index each block vector corresponds to */
 
@@ -286,21 +286,23 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
    /* Initialize counters and flags                                  */
    /* -------------------------------------------------------------- */
 
-   primme->stats.numOuterIterations = 0;
-   primme->stats.numRestarts = 0;
-   primme->stats.numMatvecs = 0;
-   primme->stats.elapsedTime = 0.0;
-   primme->stats.timeMatvec = 0.0;
-   primme->stats.timePrecond = 0.0;
-   primme->stats.timeOrtho = 0.0;
-   primme->stats.timeGlobalSum = 0.0;
-   primme->stats.volumeGlobalSum = 0.0;
-   primme->stats.numOrthoInnerProds = 0.0;
-   primme->stats.estimateMaxEVal   = -HUGE_VAL;
-   primme->stats.estimateMinEVal   = HUGE_VAL;
-   primme->stats.estimateLargestSVal = -HUGE_VAL;
-   primme->stats.maxConvTol        = 0.0L;
-   primme->stats.estimateResidualError = 0.0L;
+   primme->stats.numOuterIterations            = 0; 
+   primme->stats.numRestarts                   = 0;
+   primme->stats.numMatvecs                    = 0;
+   primme->stats.numPreconds                   = 0;
+   primme->stats.numGlobalSum                  = 0;
+   primme->stats.volumeGlobalSum               = 0;
+   primme->stats.numOrthoInnerProds            = 0.0;
+   primme->stats.elapsedTime                   = 0.0;
+   primme->stats.timeMatvec                    = 0.0;
+   primme->stats.timePrecond                   = 0.0;
+   primme->stats.timeOrtho                     = 0.0;
+   primme->stats.timeGlobalSum                 = 0.0;
+   primme->stats.estimateMinEVal               = HUGE_VAL;
+   primme->stats.estimateMaxEVal               = -HUGE_VAL;
+   primme->stats.estimateLargestSVal           = -HUGE_VAL;
+   primme->stats.maxConvTol                    = 0.0;
+   primme->stats.estimateResidualError         = 0.0;
 
    numLocked = 0;
    converged = FALSE;
@@ -709,7 +711,8 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
                      max(min(primme->numEvals, numLocked+1) - numConverged, 0);
                }
                else {
-                  maxRecentlyConverged = 1;
+                  maxRecentlyConverged =
+                     max(min(primme->numEvals, numConverged+1) - numConverged, 0);
                }
                availableBlockSize = maxRecentlyConverged;
             }
@@ -729,7 +732,7 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
             /* Limit basisSize to the matrix dimension */
 
             availableBlockSize = max(0, min(availableBlockSize, 
-                  primme->n - basisSize - numLocked - primme->numOrthoConst));
+                  primme->n - numLocked - primme->numOrthoConst));
 
             /* -------------------------------------------------------------- */
             /* NOTE: setting smallestResNorm to zero may overpass the inner   */
@@ -820,6 +823,7 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
          /* Restart the basis  */
          /* ------------------ */
 
+         int oldNumLocked = numLocked;
          assert(ldV == ldW); /* this function assumes ldV == ldW */
          restart_Sprimme(V, W, primme->nLocal, basisSize, ldV, hVals, hSVals,
                flags, iev, &blockSize, blockNorms, evecs, ldevecs, perm,
@@ -910,7 +914,22 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
             CHKERR(switch_from_GDpk(&CostModel, primme), -1);
          } /* ---------------------------------------------------------- */
 
-         if (wholeSpace) break;
+         /* ----------------------------------------------------------- */
+         /* After having exhausted the search subspace, everything      */
+         /* should be converged. However the code can only mark one     */
+         /* pair as converged per iteration when multiple shifts still  */
+         /* remain active. In this situation, exit when no pair         */
+         /* converges at some iteration.                                */
+         /* ----------------------------------------------------------- */
+
+         if (wholeSpace && (
+                  primme->target == primme_largest
+                  || primme->target == primme_smallest
+                  || (primme->target != primme_closest_leq
+                     && primme->target != primme_closest_geq
+                     && oldNumLocked >= primme->numTargetShifts-1)
+                  || oldNumLocked == numLocked))
+               break;
 
         /* ----------------------------------------------------------- */
       } /* while ((numConverged < primme->numEvals)  (restarting loop)
@@ -1025,7 +1044,7 @@ int main_iter_Sprimme(REAL *evals, int *perm, SCALAR *evecs, PRIMME_INT ldevecs,
 
             if (primme->printLevel >= 2 && primme->procID == 0) {
                fprintf(primme->outputFile, 
-                 "Verifying before return: Some vectors are unconverged. ");
+                 "Verifying before return: Some vectors are unconverged.\n");
                fflush(primme->outputFile);
             }
 

@@ -1,5 +1,5 @@
 C*******************************************************************************
-C  Copyright (c) 2016, College of William & Mary                                   
+C  Copyright (c) 2017, College of William & Mary                                   
 C  All rights reserved.                                                            
 C                                                                                  
 C  Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ C-------------------------------------------------------
      : PRIMME_JDQR,
      : PRIMME_JDQMR,
      : PRIMME_JDQMR_ETol,
-     : PRIMME_SUBSPACE_ITERATION,
+     : PRIMME_STEEPEST_DESCENT,
      : PRIMME_LOBPCG_OrthoBasis,
      : PRIMME_LOBPCG_OrthoBasis_Window
 
@@ -69,7 +69,7 @@ C-------------------------------------------------------
      : PRIMME_JDQR = 10,
      : PRIMME_JDQMR = 11,
      : PRIMME_JDQMR_ETol = 12,
-     : PRIMME_SUBSPACE_ITERATION = 13,
+     : PRIMME_STEEPEST_DESCENT = 13,
      : PRIMME_LOBPCG_OrthoBasis = 14,
      : PRIMME_LOBPCG_OrthoBasis_Window = 15
      :)
@@ -129,7 +129,14 @@ C-------------------------------------------------------
      : PRIMME_stats_numRestarts,
      : PRIMME_stats_numMatvecs,
      : PRIMME_stats_numPreconds,
+     : PRIMME_stats_numGlobalSum,
+     : PRIMME_stats_volumeGlobalSum,
+     : PRIMME_stats_numOrthoInnerProds,
      : PRIMME_stats_elapsedTime,
+     : PRIMME_stats_timeMatvec,
+     : PRIMME_stats_timePrecond,
+     : PRIMME_stats_timeOrtho,
+     : PRIMME_stats_timeGlobalSum,
      : PRIMME_stats_estimateMinEVal,
      : PRIMME_stats_estimateMaxEVal,
      : PRIMME_stats_estimateLargestSVal,
@@ -193,7 +200,14 @@ C-------------------------------------------------------
      : PRIMME_stats_numRestarts = 45,
      : PRIMME_stats_numMatvecs = 46,
      : PRIMME_stats_numPreconds = 47,
+     : PRIMME_stats_numGlobalSum =  471,
+     : PRIMME_stats_volumeGlobalSum =  472,
+     : PRIMME_stats_numOrthoInnerProds =  473,
      : PRIMME_stats_elapsedTime = 48,
+     : PRIMME_stats_timeMatvec =  4801,
+     : PRIMME_stats_timePrecond =  4802,
+     : PRIMME_stats_timeOrtho =  4803,
+     : PRIMME_stats_timeGlobalSum =  4804,
      : PRIMME_stats_estimateMinEVal = 481,
      : PRIMME_stats_estimateMaxEVal = 482,
      : PRIMME_stats_estimateLargestSVal = 483,
