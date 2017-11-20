@@ -38,6 +38,7 @@
 
 #include <limits.h>    
 #include <float.h>
+#include <stdint.h>
 #include "primme.h"
 
 /*****************************************************************************/
@@ -137,6 +138,12 @@
 #include <tgmath.h>   /* select proper function abs from fabs, cabs... */
 #endif
 
+#ifndef __cplusplus
+#  define ISFINITE isfinite
+#else
+#  define ISFINITE std::isfinite
+#endif
+
 /* TEMPLATE_PLEASE tags the functions whose prototypes depends on macros and  */
 /* are used in other files. The macro has value only when the tool ctemplate  */
 /* will inspect the source files, which happens when the macro CHECK_TEMPLATE */
@@ -155,10 +162,11 @@
 #     define TEMPLATE_PLEASE \
         APPEND_FUNC(Sprimme,SCALAR_SUF)
 #  endif
-   /* Avoid to use the final type for complex in generated headers file.      */
-   /* Instead use PRIMME_COMPLEX_FLOAT and _DOUBLE.                           */
+   /* Avoid to use the final type for integers and complex in generated       */
+   /* headers file. Instead use PRIMME_COMPLEX_FLOAT and _DOUBLE.             */
 #  undef PRIMME_COMPLEX_FLOAT
 #  undef PRIMME_COMPLEX_DOUBLE
+#  undef PRIMME_INT
 #else
 #  define TEMPLATE_PLEASE
 #endif
@@ -430,7 +438,7 @@
 #define TO_INT(X) ((X) < INT_MAX ? (X) : INT_MAX)
 
 #ifdef F77UNDERSCORE
-#define FORTRAN_FUNCTION(X) X ## _
+#define FORTRAN_FUNCTION(X) CONCAT(X,_)
 #else
 #define FORTRAN_FUNCTION(X) X
 #endif
